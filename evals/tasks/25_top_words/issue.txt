@@ -1,0 +1,1 @@
+The most common words report is wrong when the text has capital letters or punctuation.
