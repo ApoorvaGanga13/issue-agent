@@ -36,23 +36,26 @@ Model: `gemini-flash-lite-latest` (free tier). All tasks are small hand-written 
 | 5 harder tasks | v2 | 1 | 100% (contaminated, see below) |
 | 5 harder tasks | v3 | 1 | 100% |
 | 5 held-out tasks (18-22) | v1 | 3 | 80%, 80%, 80% |
-| 5 held-out tasks (18-22) | v3 | 1 so far | 100% (2 more runs pending; update this row) |
+| 5 held-out tasks (18-22) | v3 | 3 | 100%, 100%, 100% |
+
+On the held-out tasks, both prompts solved tasks 18 to 21 in every run. The whole difference comes from `22_overdraft`: v1 solved it 0 of 3 times and v3 solved it 3 of 3 times.
 
 ## What I learned
 
 1. **A saturated benchmark tells you nothing.** The first 12 tasks were solved 12/12, so I added hidden tests and vaguer issues to get a baseline with room to improve.
 2. **Passing visible tests is not the same as being correct.** On the hard tasks, prompt v1 often passed the visible tests and failed the hidden ones (OVERFIT).
 3. **I found leakage in my own experiment.** Prompt v2 listed example edge cases that overlapped with the hidden tests, so its 100% is contaminated. Prompt v3 removed the task-specific hints and I evaluated it on new held-out tasks that no prompt had been tuned on.
-4. **Concrete failure example.** On `22_overdraft`, v1 added a balance check to `withdraw` and stopped once the visible tests passed. It left `transfer` depositing into the destination before withdrawing from the source, so a failed transfer still credited the destination. v3 found that ordering bug. Traces are in `evals/traces/`.
-5. **Run-to-run variance is large.** v1 scored 60% and then 20% on identical settings, so single-run comparisons are unreliable.
+4. **Concrete failure example.** On `22_overdraft`, v1 added a balance check to `withdraw` and stopped once the visible tests passed. It left `transfer` depositing into the destination before withdrawing from the source, so a failed transfer still credited the destination. v3 found that ordering bug in all three runs. Traces are in `evals/traces/`.
+5. **Run-to-run variance is large, but task-dependent.** v1 scored 60% and then 20% on the harder set under identical settings, yet was perfectly steady at 80% on the held-out set. Single-run comparisons are unreliable.
 
 ## Limitations
 
 - Small, hand-written benchmark (22 tasks, 5 of them held out). It is not SWE-bench.
-- The held-out comparison between v1 and v3 depends mostly on one task.
+- The held-out comparison between v1 and v3 rests on a single task (`22_overdraft`). Both prompts solved the other four every time.
+- Three runs per setting is enough to see a consistent difference on one task, but not enough for statistical claims.
 - The agent sometimes makes changes beyond what was asked (for example, extra input validation).
 - Agent-run code executes on the host machine (a Docker sandbox is planned).
-- Free-tier rate limits restrict how many repeated runs are practical.
+- Free-tier rate limits (about 500 requests per day) restrict how many repeated runs are practical.
 
 ## Run it
 
