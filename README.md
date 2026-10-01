@@ -13,6 +13,7 @@ Built from scratch with the Gemini API (free tier) and plain Python. No agent fr
 - `agent/tools.py`: repo tools. Paths are sandboxed to the repo, and `edit_file` only accepts an unambiguous single match.
 - `agent/loop.py`: the tool-calling loop, with retries for rate limits and a full step-by-step trace of every run.
 - `agent/prompts.py`: versioned system prompts (v1, v2, v3) so prompt changes can be compared fairly.
+- `fix.py`: command-line tool that runs the agent on any repo plus issue text, shows a diff, and only changes your files with `--apply`.
 - `evals/`: the benchmark tasks, runner, and analysis scripts.
 
 ## How the evaluation works
@@ -27,7 +28,7 @@ Each task is a small buggy repo with an issue description. Scoring is stricter t
 
 ## Results
 
-Model: `gemini-flash-lite-latest` (free tier). All tasks are small hand-written bugs, so read these as a pilot study.
+Model: `gemini-flash-lite-latest` (free tier). The tasks are small bugs written by me with AI assistance, so read these as a pilot study.
 
 | Task set | Prompt | Runs | Hidden-test solve rate |
 |---|---|---|---|
@@ -37,22 +38,26 @@ Model: `gemini-flash-lite-latest` (free tier). All tasks are small hand-written 
 | 5 harder tasks | v3 | 1 | 100% |
 | 5 held-out tasks (18-22) | v1 | 3 | 80%, 80%, 80% |
 | 5 held-out tasks (18-22) | v3 | 3 | 100%, 100%, 100% |
+| 5 more held-out tasks (23-27) | v1 | 2 | 60%, 80% |
+| 5 more held-out tasks (23-27) | v3 | 2 | 100%, 100% |
 
-On the held-out tasks, both prompts solved tasks 18 to 21 in every run. The whole difference comes from `22_overdraft`: v1 solved it 0 of 3 times and v3 solved it 3 of 3 times.
+Across all 10 held-out tasks, v1 solved 19 of 25 task-runs (76%) and v3 solved 25 of 25 (100%). v1's misses came from three tasks: `22_overdraft` (0 of 3), `26_pagination` (1 of 2), and `27_median` (0 of 2). Both prompts solved the other seven tasks in every run.
 
 ## What I learned
 
 1. **A saturated benchmark tells you nothing.** The first 12 tasks were solved 12/12, so I added hidden tests and vaguer issues to get a baseline with room to improve.
 2. **Passing visible tests is not the same as being correct.** On the hard tasks, prompt v1 often passed the visible tests and failed the hidden ones (OVERFIT).
-3. **I found leakage in my own experiment.** Prompt v2 listed example edge cases that overlapped with the hidden tests, so its 100% is contaminated. Prompt v3 removed the task-specific hints and I evaluated it on new held-out tasks that no prompt had been tuned on.
-4. **Concrete failure example.** On `22_overdraft`, v1 added a balance check to `withdraw` and stopped once the visible tests passed. It left `transfer` depositing into the destination before withdrawing from the source, so a failed transfer still credited the destination. v3 found that ordering bug in all three runs. Traces are in `evals/traces/`.
-5. **Run-to-run variance is large, but task-dependent.** v1 scored 60% and then 20% on the harder set under identical settings, yet was perfectly steady at 80% on the held-out set. Single-run comparisons are unreliable.
+3. **I found leakage in my own experiment.** Prompt v2 listed example edge cases that overlapped with the hidden tests, so its 100% is contaminated. Prompt v3 removed the task-specific hints and I evaluated it on held-out tasks that no prompt had been tuned on.
+4. **Concrete failure example.** On `22_overdraft`, v1 added a balance check to `withdraw` and stopped once the visible tests passed. It left `transfer` depositing into the destination before withdrawing from the source, so a failed transfer still credited the destination. v3 found that ordering bug in all three runs. Traces are in `evals/traces/`. I have only inspected this one task in detail so far.
+5. **Run-to-run variance is large, but task-dependent.** v1 scored 60% and then 20% on the harder set under identical settings, yet was perfectly steady at 80% on tasks 18-22. Single-run comparisons are unreliable.
 
 ## Limitations
 
-- Small, hand-written benchmark (22 tasks, 5 of them held out). It is not SWE-bench.
-- The held-out comparison between v1 and v3 rests on a single task (`22_overdraft`). Both prompts solved the other four every time.
-- Three runs per setting is enough to see a consistent difference on one task, but not enough for statistical claims.
+- Small benchmark (27 tasks, 10 of them held out), hand-made rather than taken from real projects. It is not SWE-bench.
+- Tasks 23-27 were written after seeing v1 fail on task 22, so they may lean toward the failure type that v3 targets.
+- Hidden tests check edge cases by design, which suits a prompt that asks the agent to think about edge cases. Real issues do not come with hidden tests.
+- Two to three runs per setting is enough to see a consistent difference, but not enough for statistical claims. Repeated runs of the same task are not independent.
+- Only one model was tested.
 - The agent sometimes makes changes beyond what was asked (for example, extra input validation).
 - Agent-run code executes on the host machine (a Docker sandbox is planned).
 - Free-tier rate limits (about 500 requests per day) restrict how many repeated runs are practical.
@@ -65,9 +70,9 @@ Setup (Windows PowerShell):
     .venv\Scripts\activate
     pip install google-genai python-dotenv pytest
 
-Create a `.env` file containing `GEMINI_API_KEY=your-key`, then:
+Create a `.env` file containing `GEMINI_API_KEY=your-key`, then run the agent on any repo:
 
-    python run_agent.py
+    python fix.py path\to\repo "describe the bug here"
 
 Run the benchmark (three runs per task, prompt v3, held-out tasks):
 
@@ -83,6 +88,7 @@ Summarize the runs, or read one trace step by step:
 
 ## Roadmap
 
+- Read the v1 traces for tasks 26 and 27 and document why they failed
 - Docker sandbox for running the tests
 - Measure how minimal each fix is (lines changed)
-- More held-out tasks and a larger sample
+- Tasks taken from real open-source bug reports
