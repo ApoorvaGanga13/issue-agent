@@ -1,0 +1,1 @@
+The cache sometimes throws away entries that were just used.

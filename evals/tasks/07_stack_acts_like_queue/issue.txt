@@ -1,0 +1,1 @@
+Stack in stack.py behaves like a queue. pop() should return the most recently pushed item, and popping an empty stack should raise IndexError.

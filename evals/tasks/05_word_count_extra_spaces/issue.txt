@@ -1,0 +1,1 @@
+count_words() in words.py gives wrong counts when the text has multiple spaces or is empty.

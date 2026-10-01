@@ -1,0 +1,1 @@
+Loading configuration loses some of the default settings when a user overrides one value.

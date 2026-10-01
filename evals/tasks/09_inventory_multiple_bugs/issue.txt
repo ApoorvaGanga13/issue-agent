@@ -1,0 +1,1 @@
+Inventory quantities are wrong in inventory.py: adding the same item twice doesn't accumulate, and stock removal has other problems. Check the tests for the expected behaviour.

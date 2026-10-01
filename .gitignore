@@ -1,0 +1,6 @@
+﻿# files that must never be committed
+.venv/
+__pycache__/
+*.pyc
+.env
+evals/_work/

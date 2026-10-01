@@ -1,0 +1,1 @@
+normalize_score(150) should return 100 and normalize_score(-5) should return 0, but scores come out wrong.

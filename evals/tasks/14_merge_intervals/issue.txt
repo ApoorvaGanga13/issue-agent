@@ -1,0 +1,1 @@
+Overlapping meeting blocks are not being combined correctly in the scheduler.

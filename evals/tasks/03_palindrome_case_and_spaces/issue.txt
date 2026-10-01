@@ -1,0 +1,1 @@
+is_palindrome() in text.py should ignore letter case and spaces. 'Racecar' and 'A man a plan a canal Panama' should both return True.
