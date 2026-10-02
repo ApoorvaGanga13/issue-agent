@@ -1,5 +1,41 @@
+﻿import os
 import subprocess
+import sys
 from pathlib import Path
+
+IMAGE = "issue-agent-sandbox"
+
+
+def run_pytest(repo, mode=None):
+    """Run pytest on a repo. Returns (exit_code, output).
+
+    mode "docker": inside a locked-down container (no network, read-only repo,
+    limited memory/CPU/processes, 60 second limit).
+    mode "off": directly on this machine.
+    Exit codes 125 and above mean the sandbox itself failed, not the tests.
+    """
+    mode = mode or os.getenv("SANDBOX", "off")
+    repo = Path(repo).resolve()
+    if mode == "docker":
+        cmd = [
+            "docker", "run", "--rm",
+            "--network", "none",
+            "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
+            "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-v", f"{repo}:/work:ro",
+            "-w", "/work",
+            IMAGE,
+            "timeout", "60", "python", "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider",
+        ]
+    else:
+        cmd = [sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider"]
+    try:
+        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        return 124, "Tests timed out"
+    except FileNotFoundError:
+        return 127, "docker was not found. Is Docker Desktop installed and running?"
+    return r.returncode, (r.stdout + r.stderr)[-4000:]
 
 
 class RepoTools:
@@ -42,7 +78,11 @@ class RepoTools:
         p.write_text(text.replace(old, new))
         return "Edit applied"
 
-    def run_tests(self, cmd: str = "python -m pytest -x -q") -> str:
-        r = subprocess.run(cmd.split(), cwd=self.root, capture_output=True,
-                           text=True, timeout=120)
-        return (r.stdout + r.stderr)[-4000:]
+    def run_tests(self, cmd: str = "") -> str:
+        # The `cmd` argument is ignored: tests always run the same safe way.
+        code, out = run_pytest(self.root)
+        if code >= 125:
+            return f"Sandbox error (exit {code}): {out}"
+        if code == 124:
+            out += "\n(Tests were stopped because they ran too long.)"
+        return out

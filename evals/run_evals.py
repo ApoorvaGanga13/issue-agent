@@ -1,7 +1,6 @@
 ﻿import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 sys.path.append(".")
 from agent.loop import run_agent
 from agent.prompts import PROMPT_VERSION
+from agent.tools import run_pytest
 
 TASKS_DIR = Path("evals/tasks")
 WORK_DIR = Path("evals/_work")
@@ -19,11 +19,10 @@ TAG = os.getenv("TAG", "batch")
 
 
 def tests_pass(repo: Path) -> bool:
-    r = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q"],
-        cwd=repo, capture_output=True, text=True, timeout=120,
-    )
-    return r.returncode == 0
+    code, out = run_pytest(repo)
+    if code >= 125:
+        raise RuntimeError(f"Sandbox error (exit {code}): {out[-300:]}")
+    return code == 0
 
 
 def tests_tampered(task: Path, repo: Path) -> bool:
@@ -95,7 +94,7 @@ def main():
     prefixes = sys.argv[1:]  # e.g. python evals\run_evals.py 18 19 20
     OUT_DIR.mkdir(exist_ok=True)
     TRACE_DIR.mkdir(exist_ok=True)
-    print(f"Tag: {TAG} | Prompt: {PROMPT_VERSION} | Runs: {RUNS}")
+    print(f"Tag: {TAG} | Prompt: {PROMPT_VERSION} | Runs: {RUNS} | Sandbox: {os.getenv('SANDBOX', 'off')}")
 
     for run_number in range(1, RUNS + 1):
         out_file = OUT_DIR / f"{TAG}_{PROMPT_VERSION}_run{run_number}.json"
