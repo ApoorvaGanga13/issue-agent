@@ -1,4 +1,4 @@
-﻿# issue-agent
+# issue-agent
 
 A small coding agent that reads a bug report, explores a Python repo, edits the code, runs the tests, and produces a fix, plus an evaluation harness that measures **how often its fixes are actually correct**, not just whether the visible tests pass.
 
@@ -74,6 +74,10 @@ Across all 10 held-out tasks, v1 solved 19 of 25 task-runs (76%) and v3 solved 2
 - The agent sometimes makes changes beyond what was asked (for example, extra input validation).
 - Free-tier rate limits (about 500 requests per day) restrict how many repeated runs are practical.
 
+## Why v1 failed
+
+`evals/why_failed.py` replays the edits recorded in each saved trace onto the original task repo and runs the hidden tests against the result. `evals/trace_findings.md` lists, for every saved run of the tasks where v1 struggled, which tests failed and the code the agent wrote, next to the v3 runs for comparison.
+
 ## Run it
 
 Setup (Windows PowerShell):
@@ -105,6 +109,5 @@ Summarize the runs, or read one trace step by step:
 
 ## Roadmap
 
-- Read the v1 traces for tasks 26 and 27 and document why they failed
 - Tasks taken from real open-source bug reports
 - Test with a second model
