@@ -17,6 +17,16 @@ Built from scratch with the Gemini API (free tier) and plain Python. No agent fr
 - `evals/`: the benchmark tasks, runner, and analysis scripts (`aggregate.py`, `show_trace.py`, and `fix_size.py`, an approximate count of lines changed per fix).
 - `sandbox/image/Dockerfile`: the test-runner image.
 
+## Web interface
+
+A small FastAPI backend plus a single-page frontend (`app.py`, `static/index.html`). Pick an example bug or paste your own code and tests, choose the prompt version, and watch the agent's tool calls live. When it finishes you see the diff, whether the visible tests pass, and, for the example bugs, whether the hidden tests pass.
+
+    pip install -r requirements.txt
+    $env:SANDBOX="docker"
+    python -m uvicorn app:app --port 8000
+
+Then open http://127.0.0.1:8000. Run it only on your own machine: it executes test code, so do not expose it to the internet.
+
 ## Docker sandbox
 
 Model-written code should not run on the machine that holds your secrets. With `SANDBOX=docker`, every test run, including the benchmark scoring step that runs the agent's code plus the hidden tests, happens in a container with:

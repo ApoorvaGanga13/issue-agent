@@ -1,0 +1,230 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>issue-agent</title>
+<style>
+:root { --bg:#ffffff; --fg:#1b1f24; --muted:#6b7280; --card:#f6f8fa; --border:#d8dee4; --accent:#2563eb; --good:#16a34a; --bad:#dc2626; --add:#e6ffec; --del:#ffebe9; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --card:#161b22; --border:#30363d; --accent:#4c8dff; --good:#3fb950; --bad:#f85149; --add:#12261e; --del:#2d1215; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 900px; margin: 0 auto; padding: 16px; }
+h1 { margin: 8px 0 4px; font-size: 26px; }
+h2 { font-size: 17px; margin: 18px 0 8px; }
+header p { color: var(--muted); margin: 0; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+label { display: block; font-weight: 600; margin: 12px 0 4px; }
+select, textarea { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+textarea { font-family: ui-monospace, Consolas, monospace; font-size: 13px; resize: vertical; }
+pre { margin: 6px 0 0; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; font: 12.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+.tabs { display: flex; gap: 8px; margin-bottom: 4px; }
+.tabs button { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
+.tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.primary { margin-top: 14px; padding: 10px 22px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.primary:disabled { opacity: .5; cursor: wait; }
+.error { color: var(--bad); margin: 8px 0 0; }
+ol { padding-left: 22px; margin: 8px 0; }
+li { margin-bottom: 8px; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--muted); word-break: break-all; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; margin: 0 8px 8px 0; color: #fff; }
+.badge.good { background: var(--good); }
+.badge.bad { background: var(--bad); }
+#diff div { white-space: pre-wrap; }
+#diff .add { background: var(--add); }
+#diff .del { background: var(--del); }
+#summary { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>issue-agent</h1>
+  <p>Describe a bug. The agent reads the code, edits it, and runs the tests. Hidden tests then check whether the fix is really correct.</p>
+</header>
+<main>
+  <section class="card">
+    <div class="tabs">
+      <button id="tab-ex" class="active">Example bugs</button>
+      <button id="tab-own">Your own code</button>
+    </div>
+
+    <div id="mode-ex">
+      <label for="example">Pick a bug</label>
+      <select id="example"></select>
+      <label>Buggy code and visible tests</label>
+      <pre id="code-view"></pre>
+    </div>
+
+    <div id="mode-own" hidden>
+      <label for="own-code">Code (saved as module.py)</label>
+      <textarea id="own-code" rows="8" spellcheck="false" placeholder="def add(a, b):&#10;    return a - b"></textarea>
+      <label for="own-tests">Pytest tests (saved as test_module.py, import with: from module import ...)</label>
+      <textarea id="own-tests" rows="8" spellcheck="false" placeholder="from module import add&#10;&#10;def test_add():&#10;    assert add(2, 3) == 5"></textarea>
+    </div>
+
+    <label for="issue">Issue</label>
+    <textarea id="issue" rows="3"></textarea>
+
+    <label for="prompt">Agent prompt</label>
+    <select id="prompt">
+      <option value="v3">v3: treats the visible tests as a sample and checks edge cases</option>
+      <option value="v1">v1: basic prompt</option>
+    </select>
+
+    <button id="run" class="primary">Fix it</button>
+    <p id="error" class="error"></p>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <h2>Agent activity</h2>
+    <div id="status"></div>
+    <ol id="steps"></ol>
+    <div id="outcome" hidden>
+      <h2>Result</h2>
+      <div id="badges"></div>
+      <p id="summary"></p>
+      <h2>Code changes</h2>
+      <pre id="diff"></pre>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let examples = [];
+let mode = "example";
+let timer = null;
+
+async function loadExamples() {
+  const res = await fetch("/api/examples");
+  examples = await res.json();
+  const sel = $("example");
+  examples.forEach((ex) => {
+    const o = document.createElement("option");
+    o.value = ex.name;
+    o.textContent = ex.name.slice(0, 2) + " " + ex.name.slice(3).replace(/_/g, " ");
+    sel.appendChild(o);
+  });
+  const fav = examples.find((e) => e.name === "22_overdraft") || examples[0];
+  sel.value = fav.name;
+  showExample();
+}
+
+function showExample() {
+  const ex = examples.find((e) => e.name === $("example").value);
+  $("issue").value = ex.issue;
+  $("code-view").textContent = Object.entries(ex.files)
+    .map(([name, code]) => "# " + name + "\n" + code)
+    .join("\n");
+}
+
+function setMode(next) {
+  mode = next;
+  $("mode-ex").hidden = next !== "example";
+  $("mode-own").hidden = next !== "own";
+  $("tab-ex").classList.toggle("active", next === "example");
+  $("tab-own").classList.toggle("active", next === "own");
+  if (next === "example") showExample(); else $("issue").value = "";
+}
+
+async function run() {
+  $("error").textContent = "";
+  const body = { issue: $("issue").value, prompt: $("prompt").value };
+  if (mode === "example") {
+    body.example = $("example").value;
+  } else {
+    body.code = $("own-code").value;
+    body.tests = $("own-tests").value;
+  }
+  $("run").disabled = true;
+  const res = await fetch("/api/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    $("error").textContent = e.detail || "Could not start the run.";
+    $("run").disabled = false;
+    return;
+  }
+  const { job_id } = await res.json();
+  $("results").hidden = false;
+  $("outcome").hidden = true;
+  $("steps").innerHTML = "";
+  $("status").textContent = "Agent is working...";
+  timer = setInterval(() => poll(job_id), 1000);
+}
+
+async function poll(id) {
+  const res = await fetch("/api/jobs/" + id);
+  if (!res.ok) return;
+  const job = await res.json();
+  renderSteps(job.steps);
+  if (job.status === "running") return;
+  clearInterval(timer);
+  $("run").disabled = false;
+  if (job.status === "error") {
+    $("status").textContent = "Something went wrong: " + job.error;
+    return;
+  }
+  $("status").textContent = "Finished in " + job.agent_steps + " model steps.";
+  renderOutcome(job);
+}
+
+function renderSteps(steps) {
+  const ol = $("steps");
+  while (ol.children.length < steps.length) {
+    const s = steps[ol.children.length];
+    const li = document.createElement("li");
+    const head = document.createElement("strong");
+    head.textContent = s.tool;
+    const args = document.createElement("code");
+    args.textContent = " " + s.args;
+    const out = document.createElement("pre");
+    out.textContent = s.output;
+    li.append(head, args, out);
+    ol.appendChild(li);
+  }
+}
+
+function badge(text, ok) {
+  const b = document.createElement("span");
+  b.className = "badge " + (ok ? "good" : "bad");
+  b.textContent = text;
+  return b;
+}
+
+function renderOutcome(job) {
+  const box = $("badges");
+  box.innerHTML = "";
+  box.appendChild(badge(job.tests_passed ? "Visible tests: pass" : "Visible tests: fail", job.tests_passed));
+  if (job.hidden_passed !== null) {
+    box.appendChild(badge(
+      job.hidden_passed ? "Hidden tests: pass" : "Hidden tests: FAIL (fix only works for the visible cases)",
+      job.hidden_passed
+    ));
+  }
+  $("summary").textContent = job.summary;
+  const d = $("diff");
+  d.innerHTML = "";
+  (job.diff || "(no changes)").split("\n").forEach((line) => {
+    const row = document.createElement("div");
+    row.textContent = line || " ";
+    if (line.startsWith("+") && !line.startsWith("+++")) row.className = "add";
+    else if (line.startsWith("-") && !line.startsWith("---")) row.className = "del";
+    d.appendChild(row);
+  });
+  $("outcome").hidden = false;
+}
+
+$("example").addEventListener("change", showExample);
+$("tab-ex").addEventListener("click", () => setMode("example"));
+$("tab-own").addEventListener("click", () => setMode("own"));
+$("run").addEventListener("click", run);
+loadExamples();
+</script>
+</body>
+</html>
