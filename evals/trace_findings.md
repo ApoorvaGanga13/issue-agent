@@ -478,3 +478,87 @@ replayed onto the original task repo, then the visible and hidden tests are run.
 +    return sorted_values[mid]
 
 ```
+
+## 28_ticket_prices
+
+**v3 / hard / run 1**: passes all tests
+
+```diff
+--- a/booking.py
++++ b/booking.py
+@@ -4,5 +4,5 @@
+ def total_cents(tickets, discount_percent=0):
+     total = 0
+     for kind, quantity in tickets:
+-        total += base_price(kind)
++        total += base_price(kind) * quantity
+     return total - total * discount_percent // 100
+--- a/rates.py
++++ b/rates.py
+@@ -1,4 +1,4 @@
+-RATES = {"adult": 1250, "child": 600, "senior": 90}
++RATES = {"adult": 1250, "child": 600, "senior": 900}
+ 
+ 
+ def base_price(kind):
+
+```
+
+**v3 / hard / run 2**: FAILS: test_senior_price, test_discount_with_mixed_group
+
+```diff
+--- a/booking.py
++++ b/booking.py
+@@ -4,5 +4,5 @@
+ def total_cents(tickets, discount_percent=0):
+     total = 0
+     for kind, quantity in tickets:
+-        total += base_price(kind)
++        total += base_price(kind) * quantity
+     return total - total * discount_percent // 100
+
+```
+
+## 34_grid_paths
+
+**v3 / hard / run 1**: FAILS: test_unreachable_goal, test_same_start_and_goal
+
+```diff
+--- a/paths.py
++++ b/paths.py
+@@ -2,11 +2,15 @@
+ 
+ from grid import parse
+ 
+-DIRECTIONS = [(1, 0), (-1, 0), (0, 1)]
++DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+ 
+ 
+ def shortest(rows):
++    if not rows or not rows[0]:
++        return None
+     walls, start, goal = parse(rows)
++    if start is None or goal is None:
++        return None
+     height, width = len(rows), len(rows[0])
+     queue = deque([(start, 0)])
+     seen = {start}
+
+```
+
+**v3 / hard / run 2**: FAILS: test_unreachable_goal
+
+```diff
+--- a/paths.py
++++ b/paths.py
+@@ -2,7 +2,7 @@
+ 
+ from grid import parse
+ 
+-DIRECTIONS = [(1, 0), (-1, 0), (0, 1)]
++DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+ 
+ 
+ def shortest(rows):
+
+```
