@@ -1,0 +1,1 @@
+Environment settings do not behave properly, and one request's settings show up in the next.
