@@ -1,5 +1,7 @@
 # issue-agent
 
+![tests](https://github.com/ApoorvaGanga13/issue-agent/actions/workflows/tests.yml/badge.svg)
+
 A small coding agent that reads a bug report, explores a Python repo, edits the code, runs the tests, and produces a fix, plus an evaluation harness that measures **how often its fixes are actually correct**, not just whether the visible tests pass.
 
 Built from scratch with the Gemini API (free tier) and plain Python. No agent frameworks.
