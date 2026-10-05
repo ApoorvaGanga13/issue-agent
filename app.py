@@ -16,7 +16,11 @@ from agent.tools import RepoTools, run_pytest
 from fix import changed_files, make_diff
 
 TASKS_DIR = Path("evals/tasks")
+RESULTS_DIR = Path("evals/results")
+TRACES_DIR = Path("evals/traces")
 TOOL_NAMES = ["list_files", "read_file", "search", "edit_file", "run_tests"]
+RESULT_NAME = re.compile(r"^(?P<tag>.+)_(?P<ver>v\d+)_run(?P<run>\d+)\.json$")
+TRACE_NAME = re.compile(r"^(?P<tag>[a-z]+)_(?P<ver>v\d+)_run(?P<run>\d+)_(?P<task>\d\d_\w+)\.json$")
 
 app = FastAPI(title="issue-agent")
 jobs = {}
@@ -145,3 +149,84 @@ def job_status(job_id: str):
     if job_id not in jobs:
         raise HTTPException(404, "Unknown job.")
     return jobs[job_id]
+
+
+@app.get("/api/results")
+def results():
+    """Summary of every saved benchmark run in evals/results."""
+    groups = {}
+    for f in sorted(RESULTS_DIR.glob("*_run*.json")):
+        m = RESULT_NAME.match(f.name)
+        if not m:
+            continue
+        data = json.loads(f.read_text())
+        key = (m["tag"], m["ver"])
+        g = groups.setdefault(key, {"tag": m["tag"], "version": m["ver"], "runs": [], "solved": 0, "total": 0})
+        solved = sum(1 for r in data if r["solved"])
+        g["runs"].append({"run": int(m["run"]), "solved": solved, "total": len(data)})
+        g["solved"] += solved
+        g["total"] += len(data)
+    for g in groups.values():
+        g["runs"].sort(key=lambda r: r["run"])
+    return sorted(groups.values(), key=lambda g: (g["tag"], g["version"]))
+
+
+def recorded_result(tag, version, run, task):
+    f = RESULTS_DIR / f"{tag}_{version}_run{run}.json"
+    if not f.exists():
+        return None
+    for r in json.loads(f.read_text()):
+        if r["task"] == task:
+            return r
+    return None
+
+
+def replay_diff(task, trace):
+    """Re-apply the agent's successful edits to the original repo and diff the result."""
+    original = TASKS_DIR / task / "repo"
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        work = Path(tmp) / "work"
+        shutil.copytree(original, work)
+        for e in trace:
+            if e["type"] == "tool" and e["tool"] == "edit_file" and e["output"].startswith("Edit applied"):
+                p = (work / e["args"]["path"]).resolve()
+                if not p.is_relative_to(work.resolve()) or not p.is_file():
+                    continue
+                text = p.read_text()
+                if text.count(e["args"]["old"]) == 1:
+                    p.write_text(text.replace(e["args"]["old"], e["args"]["new"]))
+        files = changed_files(original, work)
+        return make_diff(original, work, files)
+
+
+@app.get("/api/replay")
+def replay(task: str, version: str):
+    """A saved agent run for a task and prompt. Makes no API calls."""
+    if version not in ("v1", "v3") or not re.fullmatch(r"\d\d_\w+", task):
+        raise HTTPException(400, "Unknown task or prompt.")
+    for f in sorted(TRACES_DIR.glob(f"*_{version}_run*_{task}.json")):
+        m = TRACE_NAME.match(f.name)
+        if not m:
+            continue
+        record = recorded_result(m["tag"], version, int(m["run"]), task)
+        if record is None:
+            continue
+        trace = json.loads(f.read_text())
+        steps = [
+            {"tool": e["tool"], "args": json.dumps(e["args"])[:200], "output": e["output"][:500]}
+            for e in trace if e["type"] == "tool"
+        ]
+        texts = [e["text"] for e in trace if e["type"] == "text"]
+        summary = texts[-1] if texts else ""
+        if record.get("tampered"):
+            summary += "\n\n(The benchmark marked this run as failed because the agent edited the visible test files.)"
+        return {
+            "label": f"Saved run: {m['tag']} experiment, prompt {version}, run {m['run']}. No API calls were made.",
+            "steps": steps,
+            "summary": summary,
+            "diff": replay_diff(task, trace),
+            "agent_steps": record["steps"],
+            "tests_passed": bool(record["visible_pass"]),
+            "hidden_passed": bool(record["solved"]),
+        }
+    raise HTTPException(404, "No saved run for this bug and prompt.")

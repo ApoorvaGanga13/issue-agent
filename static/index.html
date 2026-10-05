@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>issue-agent: a coding agent that has to prove its fix</title>
 <meta name="description" content="A small coding agent and an evaluation harness that checks whether its fixes are really correct, using hidden tests.">
-<link rel="icon" href="data:,">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2314213D%27/%3E%3Cpath d=%27M9 17l5 5 9-12%27 fill=%27none%27 stroke=%27%23FFD84D%27 stroke-width=%273.5%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -185,6 +185,9 @@ dl.spec div { display: flex; justify-content: space-between; gap: 16px; padding:
 dl.spec dt { color: var(--muted); }
 dl.spec dd { margin: 0; font-weight: 600; text-align: right; }
 
+.live-results { margin-top: 44px; max-width: 820px; }
+.live-results .caption { margin: 0 0 12px; }
+
 /* footer */
 footer { background: var(--ink); color: #C9D3EA; padding: 36px 0; font-size: 14.5px; }
 footer a { color: #fff; }
@@ -314,6 +317,7 @@ footer p { margin: 0 0 6px; }
 
           <div class="runbar">
             <button id="run" class="btn btn-solid" type="button">Run the agent</button>
+            <button id="replay" class="btn btn-line" type="button">Replay a saved run (no API call)</button>
           </div>
           <p id="error" class="error"></p>
         </div>
@@ -392,6 +396,14 @@ footer p { margin: 0 0 6px; }
           <li>Two or three runs per setting show a consistent difference, not a statistical proof. Only one model was tested.</li>
           <li>A third prompt (v2) also scored 100%, but its examples overlapped the hidden tests, so I discarded that result.</li>
         </ul>
+      </div>
+      <div class="live-results">
+        <h3 class="sub">All saved benchmark runs</h3>
+        <p class="caption">Read from the result files on disk when this page loads.</p>
+        <table class="tasks">
+          <thead><tr><th>Task set</th><th>Prompt</th><th>Solved per run</th><th>Total</th><th>Rate</th></tr></thead>
+          <tbody id="results-body"><tr><td colspan="5">Loading...</td></tr></tbody>
+        </table>
       </div>
       <p class="more"><a href="https://github.com/ApoorvaGanga13/issue-agent">Full results, traces, and code on GitHub</a></p>
     </div>
@@ -656,6 +668,94 @@ function renderOutcome(job) {
 $("tab-example").addEventListener("click", () => setMode("example"));
 $("tab-own").addEventListener("click", () => setMode("own"));
 $("run").addEventListener("click", run);
+const TAG_LABELS = {
+  heldout: "Held-out tasks 18-22",
+  extra: "Held-out tasks 23-27",
+  hard: "Hard tasks 28-34",
+  docker: "Sandbox check, tasks 18-22",
+};
+
+function resultsMessage(text) {
+  const body = $("results-body");
+  body.replaceChildren();
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.colSpan = 5;
+  td.textContent = text;
+  tr.appendChild(td);
+  body.appendChild(tr);
+}
+
+async function loadResults() {
+  let groups;
+  try {
+    const res = await fetch("/api/results");
+    groups = await res.json();
+  } catch (e) {
+    resultsMessage("Could not load the saved results.");
+    return;
+  }
+  if (!groups.length) {
+    resultsMessage("No saved runs yet.");
+    return;
+  }
+  const body = $("results-body");
+  body.replaceChildren();
+  groups.forEach((g) => {
+    const tr = document.createElement("tr");
+    [
+      TAG_LABELS[g.tag] || g.tag,
+      g.version,
+      g.runs.map((r) => r.solved + "/" + r.total).join(", "),
+      g.solved + "/" + g.total,
+      Math.round((100 * g.solved) / g.total) + "%",
+    ].forEach((text) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+async function replay() {
+  $("error").textContent = "";
+  if ($("run").disabled) {
+    $("error").textContent = "Wait for the current run to finish.";
+    return;
+  }
+  if (mode !== "example") {
+    $("error").textContent = "Saved runs exist only for the benchmark bugs.";
+    return;
+  }
+  const version = document.querySelector('input[name="prompt"]:checked').value;
+  let res;
+  try {
+    res = await fetch("/api/replay?task=" + encodeURIComponent(selected) + "&version=" + version);
+  } catch (e) {
+    $("error").textContent = "Could not reach the server. Is it still running?";
+    return;
+  }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    $("error").textContent = typeof e.detail === "string" ? e.detail : "Could not load a saved run.";
+    return;
+  }
+  const job = await res.json();
+  clearInterval(timer);
+  $("empty").hidden = true;
+  $("run-view").hidden = false;
+  $("steps-list").replaceChildren();
+  renderSteps(job.steps);
+  $("status").textContent = job.label;
+  renderOutcome(job);
+  if (window.matchMedia("(max-width: 860px)").matches) {
+    $("live").scrollIntoView({ block: "start" });
+  }
+}
+
+$("replay").addEventListener("click", replay);
+loadResults();
 loadExamples();
 </script>
 </body>

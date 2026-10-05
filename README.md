@@ -27,7 +27,7 @@ A small FastAPI backend plus a single-page frontend (`app.py`, `static/index.htm
     $env:SANDBOX="docker"
     python -m uvicorn app:app --port 8000
 
-Then open http://127.0.0.1:8000. Run it only on your own machine: it executes test code, so do not expose it to the internet.
+Then open http://127.0.0.1:8000. Run it only on your own machine: it executes test code, so do not expose it to the internet. The page also lists every saved benchmark run and can replay saved agent runs without calling the API, which is useful when the free-tier quota is used up.
 
 ## Docker sandbox
 
