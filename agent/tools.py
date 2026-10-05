@@ -44,7 +44,7 @@ class RepoTools:
 
     def _safe(self, rel: str) -> Path:
         p = (self.root / rel).resolve()
-        if not str(p).startswith(str(self.root)):
+        if not p.is_relative_to(self.root):
             raise ValueError("Path escapes repo")
         return p
 
