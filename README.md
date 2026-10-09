@@ -152,3 +152,7 @@ Summarize the runs, or read one trace step by step:
 ## License
 
 MIT. See the LICENSE file.
+
+## Author
+
+Apoorva Ganga M S. [Resume (PDF)](resume/Apoorva_Ganga_M_S_Resume.pdf)
