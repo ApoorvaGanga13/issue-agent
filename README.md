@@ -155,4 +155,4 @@ MIT. See the LICENSE file.
 
 ## Author
 
-Apoorva Ganga M S. [Resume (PDF)](resume/Apoorva_Ganga_M_S_Resume.pdf)
+Apoorva Ganga M S. [GitHub profile](https://github.com/ApoorvaGanga13)
