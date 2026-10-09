@@ -6,7 +6,7 @@ A small coding agent that reads a bug report, explores a Python repo, edits the 
 
 Built from scratch with the Gemini API (free tier) and plain Python. No agent frameworks.
 
-**Live demo (read-only, replays saved runs):** https://apoorvaganga13.github.io/issue-agent/
+**Live demo (read-only, replays saved runs):** PASTE-YOUR-ADDRESS-HERE
 
 To rebuild it after new benchmark runs, run `python export_static.py` and push.
 
